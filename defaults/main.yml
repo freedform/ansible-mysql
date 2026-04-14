@@ -1,0 +1,14 @@
+mysql_package: mysql-server
+mysql_version: 8.0.45-0ubuntu0.24.04.1
+
+mysql_config_dir: /etc/mysql/mysql.conf.d
+mysql_file_owner: root
+mysql_file_group: root
+
+mysql_data_owner: mysql
+mysql_data_group: mysql
+
+mysql_data_dir: /var/lib/mysql
+mysql_log_dir: /var/log/mysql
+
+mysql_dump_path: /tmp/dump.sql

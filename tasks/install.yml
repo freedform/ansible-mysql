@@ -1,0 +1,18 @@
+- name: Validate variables for install.yml task
+  ansible.builtin.assert:
+    that:
+      - mysql_package is defined
+      - mysql_version is defined
+
+- name: Install mysql server
+  ansible.builtin.apt:
+    name: "{{ mysql_package }}={{ mysql_version }}"
+    state: present
+    update_cache: true
+    allow_downgrade: true
+    cache_valid_time: 3600
+
+- name: Enable mysql daemon
+  ansible.builtin.service:
+    name: mysql
+    enabled: true

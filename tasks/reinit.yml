@@ -1,0 +1,73 @@
+---
+- name: Validate variables for init.yml task
+  ansible.builtin.assert:
+    that:
+      - mysql_data_dir is defined
+      - mysql_log_dir is defined
+
+- name: Approve MySQL re-initialization
+  ansible.builtin.pause:
+    prompt: "THIS ACTION WILL DELETE ALL MYSQL DATA, KINDLY APPROVE IT"
+    echo: true
+  register: mysql_reinit_confirmation
+
+- name: Raise and error if reinitialization is not confimed
+  ansible.builtin.fail:
+    msg: "Reinitialization is not confimed"
+  when: mysql_reinit_confirmation.user_input != 'approved'
+
+- name: Stop MySQL service
+  ansible.builtin.service:
+    name: mysql
+    state: stopped
+
+- name: Check if MySQL data directory exists
+  ansible.builtin.stat:
+    path: "{{ mysql_data_dir }}"
+  register: mysql_data_dir_stat
+
+- name: Purge MySQL data block
+  when: mysql_data_dir_stat.stat.exists
+  block:
+    - name: Copy MySQL data directory to backup
+      when: mysql_data_dir_stat.stat.exists and backup_mysql | default(true)
+      ansible.builtin.command: cp -a {{ mysql_data_dir }} {{ mysql_data_dir }}_backup_{{ lookup('pipe', 'date +%Y%m%d%H%M%S') }}
+      changed_when: true
+
+    - name: Purge MySQL data directory
+      ansible.builtin.file:
+        path: "{{ mysql_data_dir }}"
+        state: absent
+
+    - name: Recreate MySQL data directory
+      ansible.builtin.file:
+        path: "{{ mysql_data_dir }}"
+        state: directory
+        owner: "{{ mysql_data_dir_stat.stat.pw_name }}"
+        group: "{{ mysql_data_dir_stat.stat.gr_name }}"
+        mode: "{{ mysql_data_dir_stat.stat.mode }}"
+
+- name: Check if MySQL log directory exists
+  ansible.builtin.stat:
+    path: "{{ mysql_log_dir }}"
+  register: mysql_log_dir_stat
+
+- name: Purge MySQL log block
+  when: mysql_log_dir_stat.stat.exists
+  block:
+    - name: Purge MySQL log directory
+      ansible.builtin.file:
+        path: "{{ mysql_log_dir }}"
+        state: absent
+
+    - name: Recreate MySQL log directory
+      ansible.builtin.file:
+        path: "{{ mysql_log_dir }}"
+        state: directory
+        owner: "{{ mysql_log_dir_stat.stat.pw_name }}"
+        group: "{{ mysql_log_dir_stat.stat.gr_name }}"
+        mode: "{{ mysql_log_dir_stat.stat.mode }}"
+
+- name: Include MySQL init tasks
+  ansible.builtin.include_tasks:
+    file: init.yml

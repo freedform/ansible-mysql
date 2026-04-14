@@ -1,0 +1,56 @@
+- name: Validate variables for replication.yml task
+  ansible.builtin.assert:
+    that:
+      - mysql_role is defined
+      - mysql_role in mysql_supported_roles
+      - mysql_root_password is defined
+
+- name: Promote replica block
+  when: mysql_role == 'replica'
+  block:
+    - name: Validate variables for replication.yml task
+      ansible.builtin.assert:
+        that:
+          - mysql_role is defined
+          - mysql_role in mysql_supported_roles
+          - mysql_root_password is defined
+
+    - name: Stop replica
+      community.mysql.mysql_replication:
+        mode: stopreplica
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Get replica status
+      community.mysql.mysql_replication:
+        mode: getreplica
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+      register: mysql_replica_status
+      until: mysql_replica_status['Seconds_Behind_Source'] | default(0) | int == 0
+      retries: 30
+      delay: 10
+
+    - name: Disable read-only mode
+      community.mysql.mysql_variables:
+        variable: "{{ mysql_variable }}"
+        value: "OFF"
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+      loop:
+        - read_only
+        - super_read_only
+      loop_control:
+        loop_var: mysql_variable
+
+    - name: Delete all replica tasks
+      community.mysql.mysql_replication:
+        mode: resetreplicaall
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Promotion message
+      ansible.builtin.debug:
+        msg: >
+          Promotion is complete, however mysql_role variable is still 'replica'
+          Kindly set mysql_role to 'primary' in the inventory file for {{ inventory_hostname }}

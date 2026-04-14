@@ -1,0 +1,18 @@
+mysql_supported_actions:
+  - install
+  - init
+  - reinit
+  - upload_config
+  - replication
+  - state_control
+  - promote
+
+mysql_supported_states:
+  - started
+  - stopped
+  - restarted
+  - reloaded
+
+mysql_supported_roles:
+  - primary
+  - replica

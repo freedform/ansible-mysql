@@ -1,0 +1,45 @@
+- name: Validate mysql_action_list
+  ansible.builtin.assert:
+    that:
+      - mysql_actions is defined
+      - mysql_actions is string
+      - mysql_actions | length > 0
+
+- name: Create mysql_action_list
+  ansible.builtin.set_fact:
+    mysql_action_list: "{{ mysql_actions.split(',') }}"
+
+- name: Validate mysql_action_list
+  ansible.builtin.assert:
+    that:
+      - mysql_action_list | length > 0
+      - mysql_action_list | difference(mysql_supported_actions) | length == 0
+
+- name: Install mysql
+  when: "'install' in mysql_action_list"
+  ansible.builtin.include_tasks: install.yml
+
+- name: Initialize mysql
+  when: "'init' in mysql_action_list"
+  ansible.builtin.include_tasks: init.yml
+
+- name: Re-Initialize mysql
+  when: "'reinit' in mysql_action_list"
+  ansible.builtin.include_tasks: reinit.yml
+
+- name: Upload configuration files
+  when: "'upload_config' in mysql_action_list"
+  ansible.builtin.include_tasks: upload_config.yml
+
+- name: Configure replication
+  when: "'replication' in mysql_action_list"
+  ansible.builtin.include_tasks: replication.yml
+
+- name: Promote mysql replica
+  when: "'promote' in mysql_action_list"
+  ansible.builtin.include_tasks: promote.yml
+
+
+- name: Control mysql
+  when: "'state_control' in mysql_action_list"
+  ansible.builtin.include_tasks: state_control.yml

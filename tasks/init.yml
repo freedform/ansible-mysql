@@ -1,0 +1,48 @@
+- name: Validate variables for init.yml task
+  ansible.builtin.assert:
+    that:
+      - mysql_data_dir is defined
+      - mysql_root_password is defined
+      - mysql_data_owner is defined
+
+- name: Check if MySQL already initialized
+  ansible.builtin.stat:
+    path: "{{ mysql_data_dir }}/mysql"
+  register: mysql_data_dir_stat
+
+- name: MySQL init block
+  when: not mysql_data_dir_stat.stat.exists
+  block:
+    - name: Stop MySQL service (if exists)
+      ansible.builtin.service:
+        name: mysql
+        state: stopped
+
+    - name: Initialize MySQL insecure (no root password)
+      ansible.builtin.command:
+        cmd: mysqld --initialize-insecure --user={{ mysql_data_owner }} --datadir={{ mysql_data_dir }}
+        creates: "{{ mysql_data_dir }}/mysql"
+
+    - name: Start MySQL service
+      ansible.builtin.service:
+        name: mysql
+        state: started
+
+    - name: Disable read-only mode if it is enabled
+      community.mysql.mysql_variables:
+        variable: "{{ mysql_variable }}"
+        value: "OFF"
+      loop:
+        - read_only
+        - super_read_only
+      loop_control:
+        loop_var: mysql_variable
+
+    - name: Ensure root password is set (mysql_native_password)
+      community.mysql.mysql_user:
+        name: root
+        host: localhost
+        password: "{{ mysql_root_password }}"
+        check_implicit_admin: true
+        plugin: mysql_native_password
+      no_log: true

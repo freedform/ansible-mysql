@@ -1,0 +1,9 @@
+- name: Validate variables for state_control.yml task
+  ansible.builtin.assert:
+    that:
+      - mysql_state in mysql_supported_states
+
+- name: Control mysql daemon
+  ansible.builtin.service:
+    name: mysql
+    state: "{{ mysql_state }}"

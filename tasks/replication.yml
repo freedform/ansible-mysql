@@ -1,0 +1,112 @@
+- name: Validate variables for replication.yml task
+  ansible.builtin.assert:
+    that:
+      - mysql_role is defined
+      - mysql_role in mysql_supported_roles
+      - mysql_peer_ip is defined
+      - mysql_peer_ip is string
+      - mysql_replica_user is defined
+      - mysql_replica_user is string
+      - mysql_replica_password is defined
+      - mysql_replica_password is string
+      - mysql_root_password is defined
+
+- name: Actions on mysql primary role
+  when: mysql_role == 'primary'
+  block:
+    - name: Ensure replication user exists
+      community.mysql.mysql_user:
+        name: "{{ mysql_replica_user }}"
+        password: "{{ mysql_replica_password }}"
+        priv: "*.*:REPLICATION SLAVE"
+        host: "{{ mysql_peer_ip }}"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Dump all databases
+      community.mysql.mysql_db:
+        state: dump
+        name: all
+        target: "{{ mysql_dump_path }}"
+        single_transaction: true
+        dump_extra_args: "--routines --events --set-gtid-purged=ON"
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Transfer Dump to replica
+      ansible.builtin.command:
+        cmd: "scp -i /home/lsyncd_user/.ssh/lsyncd_rsync_key {{ mysql_dump_path }} lsyncd_user@{{ mysql_peer_ip }}:{{ mysql_dump_path }}"
+      register: mysql_dump_transfer
+      failed_when: mysql_dump_transfer.rc > 0
+      changed_when: mysql_dump_transfer.rc != 0
+
+- name: Actions on mysql replica role
+  when:
+    - mysql_role == 'replica'
+  block:
+    - name: Disable read-only mode
+      community.mysql.mysql_variables:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        variable: "{{ mysql_variable }}"
+        value: "OFF"
+      loop:
+        - read_only
+        - super_read_only
+      loop_control:
+        loop_var: mysql_variable
+
+    - name: Import MySQL dump
+      community.mysql.mysql_db:
+        name: all
+        state: import
+        target: "{{ mysql_dump_path }}"
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Stop replica
+      community.mysql.mysql_replication:
+        mode: stopreplica
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Configure GTID replication
+      community.mysql.mysql_replication:
+        mode: changereplication
+        primary_host: "{{ mysql_peer_ip }}"
+        primary_user: "{{ mysql_replica_user }}"
+        primary_password: "{{ mysql_replica_password }}"
+        primary_auto_position: true
+        primary_ssl: true
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Start replica
+      community.mysql.mysql_replication:
+        mode: startreplica
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Enable read-only mode
+      community.mysql.mysql_variables:
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+        variable: "{{ mysql_variable }}"
+        value: "ON"
+      loop:
+        - read_only
+        - super_read_only
+      loop_control:
+        loop_var: mysql_variable
+
+    - name: Get replica status
+      community.mysql.mysql_replication:
+        mode: getreplica
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+      register: mysql_replica_status
+
+    - name: Show replica status
+      ansible.builtin.debug:
+        msg: "{{ mysql_replica_status }}"

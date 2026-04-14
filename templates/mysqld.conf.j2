@@ -1,0 +1,9 @@
+# Managed by Ansible — DO NOT EDIT
+
+{% for section, settings in mysql_config.items() %}
+[{{ section }}]
+{% for key, value in settings.items() %}
+{{ key }} = {{ value }}
+{% endfor %}
+
+{% endfor %}
